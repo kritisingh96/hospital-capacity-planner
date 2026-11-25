@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hospital Capacity Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: summary tiles first, then three working panels (data check, scenario, summary) above a methods note. */
+:root {
+  --bg: #F4F6F6;
+  --surface: #FFFFFF;
+  --ink: #17252A;
+  --muted: #5A6B70;
+  --line: #D9E1E2;
+  --accent: #0B6E78;
+  --accent-soft: #E1F0F1;
+  --good: #2F7D4F;
+  --warn: #B26B00;
+  --crit: #B3261E;
+  --warn-soft: #FFF3DF;
+  --crit-soft: #FBE7E5;
+  --good-soft: #E4F2E9;
+  --display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1719; --surface: #172225; --ink: #E3ECEC; --muted: #93A6AA; --line: #2A3A3E;
+    --accent: #4FB8C2; --accent-soft: #1B3A3E; --good: #6BC08C; --warn: #E6A645; --crit: #F07A70;
+    --warn-soft: #3A2E17; --crit-soft: #3D1E1B; --good-soft: #1B3326; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1719; --surface: #172225; --ink: #E3ECEC; --muted: #93A6AA; --line: #2A3A3E;
+  --accent: #4FB8C2; --accent-soft: #1B3A3E; --good: #6BC08C; --warn: #E6A645; --crit: #F07A70;
+  --warn-soft: #3A2E17; --crit-soft: #3D1E1B; --good-soft: #1B3326; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 48px; display: grid; gap: 20px; }
+header { display: grid; gap: 6px; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 700 30px/1.15 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 600 19px/1.25 var(--display); margin: 0; text-wrap: balance; }
+h3 { font: 600 14px/1.3 var(--body); margin: 0; }
+.lede { color: var(--muted); max-width: 70ch; margin: 0; }
+.synthetic { display: inline-flex; align-items: center; gap: 6px; font: 500 12px/1 var(--mono); color: var(--warn); background: var(--warn-soft); padding: 6px 10px; border-radius: 999px; width: fit-content; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 4px; border-top: 3px solid var(--line); }
+.tile.good { border-top-color: var(--good); } .tile.warn { border-top-color: var(--warn); } .tile.crit { border-top-color: var(--crit); } .tile.accent { border-top-color: var(--accent); }
+.tile .label { font-size: 12.5px; color: var(--muted); }
+.tile .value { font: 500 28px/1.1 var(--mono); font-variant-numeric: tabular-nums; }
+.tile .sub { font-size: 12.5px; color: var(--muted); }
+
+.grid { display: grid; grid-template-columns: 360px 1fr; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.step { font: 500 12px/1 var(--mono); color: var(--muted); }
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font: 500 11.5px/1 var(--mono); padding: 5px 8px; border-radius: 999px; white-space: nowrap; }
+.chip.crit { color: var(--crit); background: var(--crit-soft); }
+.chip.warn { color: var(--warn); background: var(--warn-soft); }
+.chip.good { color: var(--good); background: var(--good-soft); }
+.issues { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.issues li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 10px 12px; border-radius: 8px; border-left: 3px solid var(--line); background: var(--bg); font-size: 13.5px; }
+.issues li.crit { border-left-color: var(--crit); } .issues li.warn { border-left-color: var(--warn); }
+.issues .what { color: var(--muted); font-size: 12.5px; }
+
+.btn { font: 500 13.5px/1 var(--body); border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 9px 12px; border-radius: 8px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: .55; cursor: default; }
+.btn:focus-visible, input:focus-visible, label.file:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+label.file { position: relative; overflow: hidden; }
+label.file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.toggle { display: flex; gap: 8px; align-items: center; font-size: 13.5px; }
+.toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
+.small { font-size: 12.5px; color: var(--muted); }
+
+.tablebox { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { position: sticky; top: 0; background: var(--surface); font-weight: 600; color: var(--muted); }
+td { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+tr.bad td { background: var(--crit-soft); }
+tr.dup td { background: var(--warn-soft); }
+
+.presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.sliders { display: grid; gap: 14px; }
+.slider { display: grid; gap: 4px; }
+.slider .top { display: flex; justify-content: space-between; gap: 8px; font-size: 13.5px; }
+.slider .top output { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 500; }
+.slider .hint { font-size: 12px; color: var(--muted); }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+.chartbox { width: 100%; overflow-x: auto; }
+svg text { font-family: var(--body); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
+
+.summary { font-size: 15px; line-height: 1.6; max-width: 75ch; white-space: pre-wrap; padding: 14px 16px; border-radius: 8px; background: var(--accent-soft); min-height: 64px; }
+.summary.empty { color: var(--muted); background: var(--bg); }
+.methods { font-size: 13.5px; color: var(--muted); display: grid; gap: 6px; max-width: 80ch; }
+.methods code { font-family: var(--mono); color: var(--ink); background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+footer { font-size: 12px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Demand and capacity model</div>
+    <h1>Hospital Capacity Planner</h1>
+    <p class="lede">Check a hospital's inpatient volume data, forecast bed need over ten years under different assumptions, and turn the result into an executive summary.</p>
+    <div class="synthetic">Example data: a fictional 240 bed community hospital. No real patient or client data.</div>
+  </header>
+
+  <section class="tiles" id="tiles" aria-label="Key results"></section>
+
+  <div class="grid">
+    <section class="panel" aria-labelledby="h-data">
+      <div class="panel-head"><h2 id="h-data">1. Check the data</h2><span class="step">36 months of volumes</span></div>
+      <div class="chips" id="chipSummary"></div>
+      <ul class="issues" id="issues"></ul>
+      <label class="toggle" for="excludeBad"><input type="checkbox" id="excludeBad" checked> Leave flagged rows out of the baseline</label>
+      <p class="small" id="baselineNote"></p>
+      <div class="row">
+        <label class="btn file" for="fileIn">Upload CSV<input type="file" id="fileIn" accept=".csv,text/csv"></label>
+        <button class="btn" id="resetData" type="button">Use example data</button>
+        <button class="btn" id="toggleTable" type="button" aria-pressed="false">Show all rows</button>
+      </div>
+      <p class="small">CSV columns: <span class="num">month, discharges, patient_days, staffed_beds</span> with month as YYYY-MM.</p>
+      <div class="tablebox" id="tableBox" hidden><table id="dataTable"></table></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-scn">
+      <div class="panel-head"><h2 id="h-scn">2. Forecast bed need</h2><span class="step" id="yearsLabel"></span></div>
+      <div class="presets" role="group" aria-label="Scenario presets">
+        <button class="btn" type="button" data-preset="base">Base case</button>
+        <button class="btn" type="button" data-preset="eff">Efficiency first</button>
+        <button class="btn" type="button" data-preset="growth">High growth</button>
+        <button class="btn" type="button" data-preset="op">Outpatient shift</button>
+      </div>
+      <div class="chartbox"><svg id="chart" viewBox="0 0 760 320" role="img" aria-label="Beds needed by year"></svg></div>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--accent)"></i>Your scenario</span>
+        <span><i class="sw" style="background:var(--muted)"></i>Status quo (growth only, no efficiency or outpatient change)</span>
+        <span><i class="sw" style="background:var(--warn)"></i>Current staffed beds</span>
+      </div>
+      <div class="sliders" id="sliders"></div>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="h-sum">
+    <div class="panel-head"><h2 id="h-sum">3. Executive summary</h2><span class="step" id="aiStatus"></span></div>
+    <div class="row">
+      <button class="btn primary" id="aiBtn" type="button">Write summary with AI</button>
+      <button class="btn" id="tplBtn" type="button">Quick summary (no AI)</button>
+      <button class="btn" id="copyBtn" type="button">Copy summary</button>
+    </div>
+    <div class="summary empty" id="summary" aria-live="polite">Pick a scenario, then write a summary. It leads with the answer, explains what drives it, and notes any data problems.</div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-yr">
+    <div class="panel-head"><h2 id="h-yr">Year by year</h2><span class="step">Your scenario</span></div>
+    <div class="tablebox" style="max-height:none"><table id="yearTable"></table></div>
+  </section>
+
+  <section class="panel methods" aria-labelledby="h-m">
+    <h2 id="h-m" style="color:var(--ink)">How the model works</h2>
+    <div>Baseline: the most recent 12 months of clean data, scaled to a full year if a month is missing or excluded.</div>
+    <div>Discharges in year <code>t</code> = baseline × (1 + population growth)<sup>t</sup> × (1 + use rate change)<sup>t</sup> × (1 + market share change × t/10) × (1 − outpatient shift × t/10)</div>
+    <div>ALOS moves in a straight line from today's value to the year 10 target. Patient days = discharges × ALOS. Average daily census = patient days ÷ 365. Beds needed = census ÷ target occupancy.</div>
+    <div>Data checks flag duplicate or missing months, zero or negative values, ALOS outside 2.5 to 8 days, and occupancy above 100%.</div>
+  </section>
+
+  <footer>Built by Kriti Singh. All data is synthetic. Numbers are illustrative, and a real engagement would also look at units (ICU, med surg, obstetrics), seasonality peaks and payer mix.</footer>
+</div>
+
+<script>
+(() => {
+  // ---------- example data ----------
+  function rng(seed) { let s = seed; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
+  function exampleRows() {
+    const r = rng(42);
+    const season = [1.08,1.06,1.02,0.98,0.97,0.95,0.94,0.96,0.97,1.0,1.02,1.05];
+    const rows = [];
+    for (let y = 2023; y <= 2025; y++) {
+      const annual = 15000 / Math.pow(1.015, 2025 - y);
+      for (let m = 1; m <= 12; m++) {
+        const dis = Math.round(annual / 12 * season[m-1] * (0.98 + r() * 0.04));
+        const alos = 4.45 + (season[m-1] - 1) * 1.5 + (r() - 0.5) * 0.12;
+        rows.push({ month: `${y}-${String(m).padStart(2,"0")}`, discharges: dis, patient_days: Math.round(dis * alos), staffed_beds: y === 2023 ? 232 : 240 });
+      }
+    }
+    // planted problems a real client file might have
+    const idx = k => rows.findIndex(x => x.month === k);
+    rows.splice(idx("2024-07"), 1);                               // missing month
+    const mar = rows[idx("2025-03")]; rows.splice(idx("2025-03") + 1, 0, { ...mar }); // duplicate month
+    const aug = rows[idx("2025-08")]; aug.patient_days = aug.patient_days * 10;       // keying error
+    rows[idx("2023-10")].discharges = 0;                           // blank exported as zero
+    return rows;
+  }
+
+  // ---------- state ----------
+  let rows = exampleRows();
+  let dataSource = "example";
+  const S = { g: 1.5, u: 0, m: 0, s: 0, alosT: null, occ: 80 };
+  const SLIDERS = [
+    { k: "g", label: "Population growth per year", min: -1, max: 4, step: 0.1, fmt: v => `${v.toFixed(1)}%`, hint: "Market area population. Census projections are the usual source." },
+    { k: "u", label: "Use rate change per year", min: -3, max: 3, step: 0.1, fmt: v => `${v > 0 ? "+" : ""}${v.toFixed(1)}%`, hint: "Admissions per 1,000 people. Aging pushes this up." },
+    { k: "m", label: "Market share change by year 10", min: -20, max: 20, step: 1, fmt: v => `${v > 0 ? "+" : ""}${v}%`, hint: "Relative change in the hospital's share of local admissions." },
+    { k: "s", label: "Inpatient cases moving to outpatient by year 10", min: 0, max: 20, step: 1, fmt: v => `${v}%`, hint: "Procedures that leave the hospital for same day settings." },
+    { k: "alosT", label: "Average length of stay in year 10", min: 3.5, max: 5.5, step: 0.05, fmt: v => `${v.toFixed(2)} days`, hint: "Better discharge planning lowers this." },
+    { k: "occ", label: "Target occupancy", min: 65, max: 90, step: 1, fmt: v => `${v}%`, hint: "Planning targets near 80% leave room for busy days." },
+  ];
+
+  // ---------- data checks ----------
+  function daysIn(month) { const [y, m] = month.split("-").map(Number); return new Date(y, m, 0).getDate(); }
+  function check(list) {
+    const issues = [];
+    const seen = new Set();
+    const out = list.map(r => ({ ...r, flags: [], exclude: false }));
+    for (const r of out) {
+      if (!/^\d{4}-\d{2}$/.test(r.month)) { r.flags.push("Bad month"); r.exclude = true; issues.push({ sev: "crit", title: `Row with month "${r.month}" has an unreadable date`, what: "Use the YYYY-MM format." }); continue; }
+      if (seen.has(r.month)) { r.flags.push("Duplicate"); r.dup = true; r.exclude = true; issues.push({ sev: "warn", title: `${r.month} appears twice`, what: "Second copy left out so the month is not double counted." }); continue; }
+      seen.add(r.month);
+      if (!(r.discharges > 0)) { r.flags.push("No discharges"); r.exclude = true; issues.push({ sev: "crit", title: `${r.month} shows ${r.discharges || 0} discharges`, what: "Likely a blank exported as zero. Ask the client for the real count." }); continue; }
+      if (!(r.patient_days > 0)) { r.flags.push("No patient days"); r.exclude = true; issues.push({ sev: "crit", title: `${r.month} has no patient days`, what: "Cannot compute length of stay for this month." }); continue; }
+      const alos = r.patient_days / r.discharges;
+      const occ = r.patient_days / daysIn(r.month) / r.staffed_beds;
+      if (alos < 2.5 || alos > 8) { r.flags.push("ALOS outlier"); r.exclude = true; issues.push({ sev: "crit", title: `${r.month} ALOS is ${alos.toFixed(1)} days`, what: `Patient days of ${r.patient_days.toLocaleString()} look like a keying error (an extra digit?).` }); }
+      else if (occ > 1) { r.flags.push("Over 100%"); r.exclude = true; issues.push({ sev: "crit", title: `${r.month} occupancy is ${(occ*100).toFixed(0)}%`, what: "Patient days exceed available bed days. Check staffed beds or days." }); }
+    }
+    // missing months
+    const months = [...seen].filter(m => /^\d{4}-\d{2}$/.test(m)).sort();
+    if (months.length) {
+      let [y, m] = months[0].split("-").map(Number);
+      const last = months[months.length - 1];
+      while (true) {
+        const key = `${y}-${String(m).padStart(2,"0")}`;
+        if (key > last) break;
+        if (!seen.has(key)) issues.push({ sev: "warn", title: `${key} is missing`, what: "Baseline is scaled up to a full year when a month is absent." });
+        m++; if (m > 12) { m = 1; y++; }
+      }
+    }
+    const order = { crit: 0, warn: 1 };
+    issues.sort((a, b) => order[a.sev] - order[b.sev]);
+    return { rows: out, issues };
+  }
+
+  function baseline(checked, exclude) {
+    const usable = checked.rows.filter(r => /^\d{4}-\d{2}$/.test(r.month) && !r.dup && (!exclude || !r.exclude) && r.discharges > 0);
+    usable.sort((a, b) => a.month < b.month ? -1 : 1);
+    if (!usable.length) return null;
+    const last = usable[usable.length - 1].month;
+    const [ly, lm] = last.split("-").map(Number);
+    const start = `${lm === 12 ? ly : ly - 1}-${String(lm === 12 ? 1 : lm + 1).padStart(2,"0")}`;
+    const win = usable.filter(r => r.month >= start && r.month <= last);
+    const scale = 12 / win.length;
+    const dis = win.reduce((a, r) => a + r.discharges, 0) * scale;
+    const days = win.reduce((a, r) => a + r.patient_days, 0) * scale;
+    const beds = usable[usable.length - 1].staffed_beds;
+    return { year: lm === 12 ? ly : ly, start, last, months: win.length, dis, days, alos: days / dis, beds, adc: days / 365, occ: days / 365 / beds };
+  }
+
+  // ---------- model ----------
+  function forecast(b, p, statusQuo) {
+    const out = [];
+    for (let t = 0; t <= 10; t++) {
+      const f = t / 10;
+      let dis = b.dis * Math.pow(1 + p.g / 100, t) * Math.pow(1 + p.u / 100, t) * (1 + (p.m / 100) * f);
+      let alos = b.alos;
+      if (!statusQuo) { dis *= (1 - (p.s / 100) * f); alos = b.alos + (p.alosT - b.alos) * f; }
+      const days = dis * alos, adc = days / 365, beds = adc / (p.occ / 100);
+      out.push({ year: b.year + t, dis, alos, days, adc, beds });
+    }
+    return out;
+  }
+
+  // ---------- rendering ----------
+  const $ = id => document.getElementById(id);
+  const fmt = (n, d = 0) => n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  let showAll = false, current = null;
+
+  function renderSliders() {
+    $("sliders").innerHTML = SLIDERS.map(s => `
+      <div class="slider">
+        <div class="top"><label for="sl-${s.k}">${s.label}</label><output id="out-${s.k}" for="sl-${s.k}"></output></div>
+        <input type="range" id="sl-${s.k}" min="${s.min}" max="${s.max}" step="${s.step}">
+        <div class="hint">${s.hint}</div>
+      </div>`).join("");
+    for (const s of SLIDERS) {
+      $(`sl-${s.k}`).addEventListener("input", e => { S[s.k] = parseFloat(e.target.value); update(); });
+    }
+  }
+  function syncSliders() {
+    for (const s of SLIDERS) { $(`sl-${s.k}`).value = S[s.k]; $(`out-${s.k}`).textContent = s.fmt(S[s.k]); }
+  }
+
+  function renderData(checked, b) {
+    const crit = checked.issues.filter(i => i.sev === "crit").length;
+    const warn = checked.issues.filter(i => i.sev === "warn").length;
+    $("chipSummary").innerHTML = (crit ? `<span class="chip crit">${crit} critical</span>` : "") + (warn ? `<span class="chip warn">${warn} warning${warn > 1 ? "s" : ""}</span>` : "") + (!crit && !warn ? `<span class="chip good">No problems found</span>` : "") + `<span class="chip good">${checked.rows.length} rows read</span>`;
+    $("issues").innerHTML = checked.issues.map(i => `<li class="${i.sev}"><span class="chip ${i.sev}">${i.sev === "crit" ? "Fix" : "Check"}</span><div><div>${i.title}</div><div class="what">${i.what}</div></div></li>`).join("");
+    $("baselineNote").innerHTML = b ? `Baseline uses ${b.months} months (${b.start} to ${b.last}): <span class="num">${fmt(b.dis)}</span> discharges a year, ALOS <span class="num">${fmt(b.alos, 2)}</span> days, <span class="num">${fmt(b.occ * 100)}%</span> occupancy on ${b.beds} beds.` : "No usable rows.";
+    $("tableBox").hidden = !showAll;
+    if (showAll) {
+      $("dataTable").innerHTML = `<thead><tr><th>Month</th><th>Discharges</th><th>Patient days</th><th>ALOS</th><th>Beds</th><th>Flag</th></tr></thead><tbody>` +
+        checked.rows.map(r => `<tr class="${r.dup ? "dup" : r.exclude ? "bad" : ""}"><td>${r.month}</td><td>${fmt(r.discharges || 0)}</td><td>${fmt(r.patient_days || 0)}</td><td>${r.discharges > 0 ? fmt(r.patient_days / r.discharges, 2) : "n/a"}</td><td>${r.staffed_beds}</td><td>${r.flags.join(", ")}</td></tr>`).join("") + `</tbody>`;
+    }
+  }
+
+  function renderTiles(b, sc, sq) {
+    const end = sc[10], endSq = sq[10];
+    const gap = Math.round(end.beds) - b.beds;
+    const firstShort = sc.find(r => Math.round(r.beds) > b.beds);
+    const saved = Math.round(endSq.beds) - Math.round(end.beds);
+    $("tiles").innerHTML = `
+      <div class="tile accent"><div class="label">Staffed beds today</div><div class="value">${fmt(b.beds)}</div><div class="sub">${fmt(b.occ * 100)}% occupied on average</div></div>
+      <div class="tile accent"><div class="label">Beds needed in ${end.year}</div><div class="value">${fmt(end.beds)}</div><div class="sub">at ${S.occ}% target occupancy</div></div>
+      <div class="tile ${gap > 0 ? "crit" : "good"}"><div class="label">${gap > 0 ? "Shortfall" : "Surplus"} in ${end.year}</div><div class="value">${fmt(Math.abs(gap))}</div><div class="sub">${firstShort ? `Need passes capacity in ${firstShort.year}` : "Need stays within capacity"}</div></div>
+      <div class="tile ${saved > 0 ? "good" : "warn"}"><div class="label">Beds avoided vs status quo</div><div class="value">${fmt(Math.max(0, saved))}</div><div class="sub">Status quo needs ${fmt(endSq.beds)} beds</div></div>`;
+  }
+
+  function niceMax(v) { const step = v > 400 ? 100 : 50; return Math.ceil(v / step) * step; }
+  function renderChart(b, sc, sq) {
+    const W = 760, H = 320, L = 52, R = 70, T = 16, B = 34;
+    const maxV = niceMax(Math.max(...sc.map(r => r.beds), ...sq.map(r => r.beds), b.beds) * 1.08);
+    const minV = Math.max(0, Math.floor(Math.min(...sc.map(r => r.beds), ...sq.map(r => r.beds), b.beds) * 0.8 / 50) * 50);
+    const x = t => L + (W - L - R) * t / 10;
+    const y = v => T + (H - T - B) * (1 - (v - minV) / (maxV - minV));
+    const step = (maxV - minV) / 5;
+    let g = "";
+    for (let i = 0; i <= 5; i++) {
+      const v = minV + step * i;
+      g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${fmt(v)}</text>`;
+    }
+    for (let t = 0; t <= 10; t += 2) g += `<text x="${x(t)}" y="${H - 10}" text-anchor="middle" font-size="11" fill="var(--muted)">${sc[t].year}</text>`;
+    const path = arr => arr.map((r, t) => `${t ? "L" : "M"}${x(t).toFixed(1)},${y(r.beds).toFixed(1)}`).join("");
+    const area = path(sc) + `L${x(10)},${y(minV)}L${x(0)},${y(minV)}Z`;
+    const cap = y(b.beds);
+    const e = sc[10], es = sq[10];
+    let ly1 = y(e.beds), ly2 = y(es.beds);
+    if (Math.abs(ly1 - ly2) < 14) { if (ly1 <= ly2) ly1 -= 7, ly2 += 7; else ly1 += 7, ly2 -= 7; }
+    let lyc = cap; if (Math.abs(lyc - ly1) < 14) lyc += lyc > ly1 ? 10 : -10; if (Math.abs(lyc - ly2) < 14) lyc += lyc > ly2 ? 10 : -10;
+    $("chart").innerHTML = `
+      ${g}
+      <path d="${area}" fill="var(--accent)" opacity=".08"/>
+      <line x1="${L}" x2="${W - R}" y1="${cap}" y2="${cap}" stroke="var(--warn)" stroke-width="2" stroke-dasharray="2 4"/>
+      <path d="${path(sq)}" fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="6 5"/>
+      <path d="${path(sc)}" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round"/>
+      <circle cx="${x(10)}" cy="${y(e.beds)}" r="4.5" fill="var(--accent)"/>
+      <circle cx="${x(10)}" cy="${y(es.beds)}" r="3.5" fill="var(--muted)"/>
+      <text x="${x(10) + 9}" y="${ly1 + 4}" font-size="12" font-weight="600" fill="var(--accent)">${fmt(e.beds)}</text>
+      <text x="${x(10) + 9}" y="${ly2 + 4}" font-size="12" fill="var(--muted)">${fmt(es.beds)}</text>
+      <text x="${x(10) + 9}" y="${lyc + 4}" font-size="12" fill="var(--warn)">${fmt(b.beds)}</text>
+      <text x="${L}" y="${T - 4}" font-size="11" fill="var(--muted)">Beds needed</text>`;
+    $("yearsLabel").textContent = `${sc[0].year} to ${sc[10].year}`;
+  }
+
+  function renderYears(sc, b) {
+    $("yearTable").innerHTML = `<thead><tr><th>Year</th><th>Discharges</th><th>ALOS</th><th>Patient days</th><th>Avg daily census</th><th>Beds needed</th><th>Vs today</th></tr></thead><tbody>` +
+      sc.map(r => { const d = Math.round(r.beds) - b.beds; return `<tr><td>${r.year}</td><td>${fmt(r.dis)}</td><td>${fmt(r.alos, 2)}</td><td>${fmt(r.days)}</td><td>${fmt(r.adc)}</td><td>${fmt(r.beds)}</td><td style="color:${d > 0 ? "var(--crit)" : "var(--good)"}">${d > 0 ? "+" : ""}${fmt(d)}</td></tr>`; }).join("") + `</tbody>`;
+  }
+
+  function update() {
+    const checked = check(rows);
+    const b = baseline(checked, $("excludeBad").checked);
+    if (!b) { $("tiles").innerHTML = ""; renderData(checked, b); return; }
+    if (S.alosT === null) S.alosT = b.alos;
+    syncSliders();
+    const sc = forecast(b, S, false), sq = forecast(b, S, true);
+    current = { checked, b, sc, sq };
+    renderData(checked, b); renderTiles(b, sc, sq); renderChart(b, sc, sq); renderYears(sc, b);
+  }
+
+  // ---------- presets ----------
+  function preset(name) {
+    const fresh = baseline(check(rows), $("excludeBad").checked); const a0 = fresh ? fresh.alos : 4.5;
+    const P = {
+      base:   { g: 1.5, u: 0, m: 0, s: 0, alosT: a0, occ: 80 },
+      eff:    { g: 1.5, u: 0, m: 0, s: 5, alosT: Math.max(3.5, Math.round((a0 - 0.3) * 20) / 20), occ: 82 },
+      growth: { g: 2.5, u: 0.5, m: 10, s: 0, alosT: a0, occ: 80 },
+      op:     { g: 1.5, u: 0, m: 0, s: 15, alosT: Math.round((a0 + 0.15) * 20) / 20, occ: 80 },
+    }[name];
+    Object.assign(S, P); update();
+    document.querySelectorAll("[data-preset]").forEach(btn => btn.setAttribute("aria-pressed", btn.dataset.preset === name ? "true" : "false"));
+  }
+  document.querySelectorAll("[data-preset]").forEach(btn => btn.addEventListener("click", () => preset(btn.dataset.preset)));
+
+  // ---------- CSV ----------
+  function parseCSV(text) {
+    const lines = text.trim().split(/\r?\n/);
+    const head = lines.shift().split(",").map(h => h.trim().toLowerCase());
+    const need = ["month", "discharges", "patient_days", "staffed_beds"];
+    const miss = need.filter(n => !head.includes(n));
+    if (miss.length) throw new Error(`Missing column${miss.length > 1 ? "s" : ""}: ${miss.join(", ")}`);
+    return lines.filter(l => l.trim()).map(l => {
+      const c = l.split(","); const o = {};
+      head.forEach((h, i) => o[h] = (c[i] || "").trim());
+      return { month: o.month, discharges: parseFloat(o.discharges), patient_days: parseFloat(o.patient_days), staffed_beds: parseFloat(o.staffed_beds) };
+    });
+  }
+  $("fileIn").addEventListener("change", async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try { rows = parseCSV(await f.text()); dataSource = f.name; S.alosT = null; update(); }
+    catch (err) { $("issues").innerHTML = `<li class="crit"><span class="chip crit">Fix</span><div><div>Could not read ${f.name}</div><div class="what">${err.message}. Expected columns: month, discharges, patient_days, staffed_beds.</div></div></li>`; }
+    e.target.value = "";
+  });
+  $("resetData").addEventListener("click", () => { rows = exampleRows(); dataSource = "example"; S.alosT = null; preset("base"); });
+  $("toggleTable").addEventListener("click", e => { showAll = !showAll; e.currentTarget.setAttribute("aria-pressed", String(showAll)); e.currentTarget.textContent = showAll ? "Hide rows" : "Show all rows"; update(); });
+  $("excludeBad").addEventListener("change", () => { S.alosT = null; update(); });
+
+  // ---------- summary ----------
+  function facts() {
+    const { checked, b, sc, sq } = current;
+    const e = sc[10], es = sq[10];
+    const firstShort = sc.find(r => Math.round(r.beds) > b.beds);
+    return {
+      baseline_period: `${b.start} to ${b.last}`,
+      staffed_beds_today: b.beds,
+      annual_discharges_today: Math.round(b.dis),
+      alos_today: +b.alos.toFixed(2),
+      occupancy_today_pct: Math.round(b.occ * 100),
+      assumptions: { population_growth_pct_per_year: S.g, use_rate_change_pct_per_year: S.u, market_share_change_pct_by_year10: S.m, outpatient_shift_pct_by_year10: S.s, alos_year10: +S.alosT.toFixed(2), target_occupancy_pct: S.occ },
+      forecast_year: e.year,
+      beds_needed_forecast_year: Math.round(e.beds),
+      beds_needed_status_quo: Math.round(es.beds),
+      shortfall_vs_today: Math.round(e.beds - b.beds),
+      first_year_need_exceeds_capacity: firstShort ? firstShort.year : null,
+      data_issues: checked.issues.map(i => i.title),
+      flagged_rows_excluded: $("excludeBad").checked,
+    };
+  }
+  function templateSummary() {
+    const f = facts();
+    const gap = f.shortfall_vs_today;
+    const avoided = f.beds_needed_status_quo - f.beds_needed_forecast_year;
+    let t = gap > 0
+      ? `Under this scenario the hospital needs about ${fmt(f.beds_needed_forecast_year)} beds by ${f.forecast_year}, ${fmt(gap)} more than the ${fmt(f.staffed_beds_today)} it staffs today. Demand first passes current capacity in ${f.first_year_need_exceeds_capacity}.`
+      : `Under this scenario the hospital needs about ${fmt(f.beds_needed_forecast_year)} beds by ${f.forecast_year}, which fits within the ${fmt(f.staffed_beds_today)} it staffs today with ${fmt(-gap)} to spare.`;
+    t += `\n\nThe main driver is ${f.assumptions.population_growth_pct_per_year}% yearly population growth on a base of ${fmt(f.annual_discharges_today)} discharges and a ${f.alos_today} day average stay.`;
+    if (avoided > 0.5) t += ` Shorter stays and the shift to outpatient care avoid about ${fmt(avoided)} beds compared with the status quo, so operational improvement should be tested before new construction.`;
+    else t += ` Without efficiency gains the status quo and this scenario need the same capacity, so length of stay and outpatient options are worth testing before committing capital.`;
+    if (f.data_issues.length) t += `\n\nData note: ${f.data_issues.length} issues were found in the source file (for example ${f.data_issues.slice(0, 2).join("; ")}). ${f.flagged_rows_excluded ? "Flagged rows were left out of the baseline." : "Flagged rows are still in the baseline, which may distort the result."} These should be confirmed with the client.`;
+    t += `\n\nNext steps: break the forecast out by unit (ICU, med surg, obstetrics), test peak season demand rather than the annual average, and compare renovation and new build options against this need.`;
+    return t;
+  }
+  function setSummary(text, empty) { const el = $("summary"); el.textContent = text; el.classList.toggle("empty", !!empty); }
+  $("tplBtn").addEventListener("click", () => { setSummary(templateSummary()); $("aiStatus").textContent = "Quick summary from a fixed template"; });
+  $("copyBtn").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("summary").textContent); $("aiStatus").textContent = "Copied"; }
+    catch { $("aiStatus").textContent = "Copy was blocked here. Select the text and copy it instead."; }
+  });
+
+  let sample = null, busy = false;
+  $("aiBtn").addEventListener("click", async () => {
+    if (busy) return;
+    if (!sample) { setSummary(templateSummary()); $("aiStatus").textContent = "AI is not available in this view, so this is the quick summary"; return; }
+    busy = true; $("aiBtn").disabled = true; $("aiStatus").textContent = "Writing";
+    const prompt = `You are a senior healthcare strategy consultant writing for a hospital CEO and board.
+Using ONLY the facts in the JSON below, write an executive summary of 120 to 170 words in plain English.
+Structure: first sentence states the answer (beds needed vs today). Then what drives it. Then what the comparison with the status quo implies about operational improvement versus construction. Then one sentence on data quality if there are issues. End with two concrete next analyses.
+Rules: no headings, no bullet points, no dashes of any kind, no semicolons, round numbers sensibly, do not invent any facts, costs or names. Separate paragraphs with a blank line.
+
+${JSON.stringify(facts(), null, 2)}`;
+    try {
+      const res = await sample(prompt, { modelTier: "quick", onText: ({ text }) => setSummary(text) });
+      setSummary(res.text); $("aiStatus").textContent = "Written by Claude from the numbers above";
+    } catch (err) {
+      setSummary(templateSummary());
+      $("aiStatus").textContent = err && err.code === "rate_limited" ? "AI is busy, showing the quick summary. Try again in a minute." : "AI was not available, so this is the quick summary";
+      if (err && err.code === "not_granted") { sample = null; }
+    } finally { busy = false; $("aiBtn").disabled = false; }
+  });
+
+  // ---------- start ----------
+  renderSliders();
+  preset("base");
+  if (!(window.claude && typeof window.claude.use === "function")) { $("aiBtn").hidden = true; $("tplBtn").textContent = "Write summary"; }
+  if (window.claude && typeof window.claude.use === "function") {
+    window.claude.use("sample").then(s => { sample = s; if (!s) $("aiStatus").textContent = "AI unavailable here. The quick summary still works."; }).catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
