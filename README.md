@@ -4,7 +4,7 @@ An interactive tool that answers a common hospital planning question: **how many
 
 It validates monthly inpatient volume data, forecasts bed need under different scenarios, and turns the result into a plain English executive summary.
 
-**Live demo:** [add your GitHub Pages link here]
+**Live demo:** (https://kritisingh96.github.io/hospital-capacity-planner/)
 
 ![Overview](screenshots/1_Overview_Efficiency_First.png)
 
